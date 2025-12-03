@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-RUN pip install --upgrade pip && pip install \
+RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir \
     transformers==4.43.3 \
     peft==0.12.0 \
     accelerate==0.33.0 \
