@@ -1,65 +1,99 @@
-import argparse, os
+import argparse
+import os
 from datasets import load_dataset
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from transformers import (
+    AutoTokenizer,
+    AutoModelForCausalLM,
+    BitsAndBytesConfig,
+)
 from peft import LoraConfig, get_peft_model
-from trl import SFTTrainer
+from trl import SFTTrainer, SFTConfig
+from lora_layer_config import load_lora_config
 
-HF = "/workspace/models/hf_mistral"
+HF_MODEL_DIR = "/workspace/models/hf_mistral"
+DATA_PATH = "/workspace/data/processed/train.jsonl"
 
-def get_cfg(level):
-    if level=="level1":
-        return dict(r=8,alpha=16,modules=["q_proj","v_proj"],lr=2e-4)
-    if level=="level2":
-        return dict(r=16,alpha=32,modules=["q_proj","v_proj","k_proj","o_proj"],lr=1e-4)
-    if level=="level3":
-        return dict(r=16,alpha=32,modules=["q_proj","v_proj","k_proj","o_proj"],lr=5e-5)
+
+def parse_args():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--lora_name", required=True)
+    ap.add_argument("--max_steps", type=int, default=200)
+    ap.add_argument("--max_seq_length", type=int, default=512)
+    return ap.parse_args()
+
 
 def main():
-    parser=argparse.ArgumentParser()
-    parser.add_argument("--lora",required=True)
-    args=parser.parse_args()
+    args = parse_args()
 
-    cfg=get_cfg(args.lora)
-    out = f"/workspace/peft/{args.lora}"
-    os.makedirs(out,exist_ok=True)
+    cfg = load_lora_config(args.lora_name)
+    out_dir = f"/workspace/peft/{args.lora_name}"
+    os.makedirs(out_dir, exist_ok=True)
 
-    ds=load_dataset("json",data_files="/workspace/data/processed/train.jsonl")["train"]
+    print("Loading dataset...")
+    ds = load_dataset("json", data_files=DATA_PATH)["train"]
 
-    tokenizer=AutoTokenizer.from_pretrained(HF)
+    print("Loading tokenizer...")
+    tokenizer = AutoTokenizer.from_pretrained(HF_MODEL_DIR)
     tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "right"
 
-    bnb=BitsAndBytesConfig(load_in_4bit=True,bnb_4bit_quant_type="nf4")
+    print("Loading model (4-bit)...")
+    bnb = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_compute_dtype="bfloat16",
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_quant_type="nf4",
+    )
 
-    model=AutoModelForCausalLM.from_pretrained(HF,quantization_config=bnb,device_map="auto")
+    model = AutoModelForCausalLM.from_pretrained(
+        HF_MODEL_DIR,
+        quantization_config=bnb,
+        device_map="auto",
+    )
 
-    lora=LoraConfig(
-        r=cfg["r"],
-        lora_alpha=cfg["alpha"],
-        target_modules=cfg["modules"],
-        lora_dropout=0.05,
+    print("Applying LoRA config...")
+    lora_cfg = LoraConfig(
+        r=cfg.r,
+        lora_alpha=cfg.alpha,
+        target_modules=cfg.target_modules,
+        lora_dropout=cfg.dropout,
         bias="none",
         task_type="CAUSAL_LM",
     )
-    model=get_peft_model(model,lora)
 
-    trainer=SFTTrainer(
+    model = get_peft_model(model, lora_cfg)
+
+    print("Trainer config...")
+    train_cfg = SFTConfig(
+        output_dir=out_dir,
+        per_device_train_batch_size=1,
+        gradient_accumulation_steps=8,
+        learning_rate=cfg.learning_rate,
+        max_steps=args.max_steps,
+        warmup_steps=20,
+        logging_steps=10,
+        fp16=True,
+        max_seq_length=args.max_seq_length,
+        dataset_text_field="text",
+        packing=False,
+    )
+
+    print("Starting trainer...")
+    trainer = SFTTrainer(
         model=model,
         tokenizer=tokenizer,
         train_dataset=ds,
-        dataset_text_field="text",
-        max_seq_length=512,
-        packing=False,
-        args=dict(
-            output_dir=out,
-            max_steps=200,
-            per_device_train_batch_size=1,
-            gradient_accumulation_steps=8,
-            learning_rate=cfg["lr"],
-            save_strategy="no"
-        )
+        args=train_cfg,
     )
-    trainer.train()
-    trainer.model.save_pretrained(out)
 
-if __name__=="__main__":
+    trainer.train()
+
+    print("Saving adapter...")
+    trainer.model.save_pretrained(out_dir)
+    tokenizer.save_pretrained(out_dir)
+
+    print(f"Training complete → {out_dir}")
+
+
+if __name__ == "__main__":
     main()

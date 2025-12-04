@@ -29,19 +29,19 @@ def main():
         run("python3 /app/scripts/build_dataset.py")
 
     elif args.mode == "train_level1":
-        run("python3 /app/scripts/train_lora.py --lora level1")
+        run("python3 /app/scripts/train_lora.py --lora_name level1")
 
     elif args.mode == "train_level2":
-        run("python3 /app/scripts/train_lora.py --lora level2")
+        run("python3 /app/scripts/train_lora.py --lora_name level2")
 
     elif args.mode == "train_level3":
-        run("python3 /app/scripts/train_lora.py --lora level3")
+        run("python3 /app/scripts/train_lora.py --lora_name level3")
 
     elif args.mode == "eval_all":
         run("python3 /app/scripts/eval_layers.py")
 
     elif args.mode == "merge_level":
-        run("python3 /app/scripts/merge_lora.py")
+        run("python3 /app/scripts/merge_lora.py --adapter /workspace/peft/level3")
 
     elif args.mode == "archive_pdfs":
         run("python3 /app/scripts/archive_used_pdfs.py")
@@ -53,10 +53,10 @@ def main():
     elif args.mode == "train_all":
         run("python3 /app/scripts/pdf_pretest.py")
         run("python3 /app/scripts/build_dataset.py")
-        run("python3 /app/scripts/train_lora.py --lora level1")
-        run("python3 /app/scripts/train_lora.py --lora level2")
-        run("python3 /app/scripts/train_lora.py --lora level3")
-        run("python3 /app/scripts/merge_lora.py")
+        run("python3 /app/scripts/train_lora.py --lora_name level1")
+        run("python3 /app/scripts/train_lora.py --lora_name level2")
+        run("python3 /app/scripts/train_lora.py --lora_name level3")
+        run("python3 /app/scripts/merge_lora.py --adapter /workspace/peft/level3")
         run("python3 /app/scripts/convert_to_gguf.py")
         run("python3 /app/scripts/archive_used_pdfs.py")
 
