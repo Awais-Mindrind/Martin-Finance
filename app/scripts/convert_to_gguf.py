@@ -29,12 +29,8 @@ def main():
 
     f16_path = target_path.replace(".gguf", ".f16.gguf")
 
-    # Convert HF model → GGUF FP16
-    run(
-        f"python3 {LLAMA_CPP}/convert_hf_to_gguf.py "
-        f"{HF_MERGED} "
-        f"--outfile {f16_path}"
-    )
+    # Convert HF model → GGUF FP16 (underscore filename, no --model-dir flag)
+    run(f"python3 {LLAMA_CPP}/convert_hf_to_gguf.py {HF_MERGED} --outfile {f16_path}")
 
     # Quantize to Q4_K_M
     run(f"{QUANT_BIN} {f16_path} {target_path} Q4_K_M")
