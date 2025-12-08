@@ -14,7 +14,7 @@ RUN mkdir -p /workspace/models /workspace/peft /workspace/data /workspace/llama.
 WORKDIR /workspace
 
 # Build llama.cpp with tooling (llama-quantize, llama-cli, etc.)
-RUN git clone https://github.com/ggerganov/llama.cpp /workspace/llama.cpp && \
+RUN git -c http.version=HTTP/1.1 clone --depth 1 --single-branch https://github.com/ggerganov/llama.cpp /workspace/llama.cpp && \
     cd /workspace/llama.cpp && mkdir -p build && cd build && \
     cmake .. -DLLAMA_BUILD_TOOL=ON && \
     make -j"$(nproc)"
