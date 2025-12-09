@@ -1,4 +1,35 @@
 # How to fine‑tune on a PDF in /workspace
+0) Install non-conflicting dependencies
+```bash
+pip uninstall -y bitsandbytes torch torchvision torchaudio
+pip install --no-cache-dir \
+  torch==2.1.2+cu121 \
+  torchvision==0.16.2+cu121 \
+  torchaudio==2.1.2 \
+  --index-url https://download.pytorch.org/whl/cu121
+pip install --no-cache-dir bitsandbytes==0.43.1
+```
+
+```bash
+python3 - <<'PY'
+from pathlib import Path
+path = Path("/workspace/llama.cpp/convert_hf_to_gguf.py")
+txt = path.read_text()
+marker = "import torch\n"
+inject = """import torch
+if not hasattr(torch, 'uint64'): torch.uint64 = torch.int64
+if not hasattr(torch, 'uint32'): torch.uint32 = torch.int32
+if not hasattr(torch, 'uint16'): torch.uint16 = torch.int16
+if not hasattr(torch, 'uint8'):  torch.uint8  = torch.int8
+"""
+if inject not in txt:
+    txt = txt.replace(marker, inject, 1)
+    path.write_text(txt)
+    print("Patched convert_hf_to_gguf.py with uint aliases")
+else:
+    print("Patch already present")
+PY
+```
 
 1) Copy your PDF into the raw input folder:
 ```bash
