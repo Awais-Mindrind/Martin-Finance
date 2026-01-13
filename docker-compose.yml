@@ -1,0 +1,16 @@
+services:
+  llm-pod:
+    build: .
+    image: awais2512/martin-model-tune:latest
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    volumes:
+      - ./workspace:/workspace
+    environment:
+      - MODEL_PATH=/workspace/models/mistral-7b-instruct-v0.2.Q4_K_M.gguf
+

@@ -16,7 +16,12 @@ WORKDIR /workspace
 # Build llama.cpp with tooling (llama-quantize, llama-cli, etc.)
 RUN git -c http.version=HTTP/1.1 clone --depth 1 --single-branch https://github.com/ggerganov/llama.cpp /workspace/llama.cpp && \
     cd /workspace/llama.cpp && mkdir -p build && cd build && \
-    cmake .. -DLLAMA_BUILD_TOOL=ON && \
+    cmake .. \
+        -DGGML_CUDA=ON \
+        -DLLAMA_BUILD_TOOLS=ON \
+        -DGGML_AVX2=OFF \
+        -DGGML_FMA=OFF \
+        -DCMAKE_LIBRARY_PATH=/usr/local/cuda/lib64/stubs && \
     make -j"$(nproc)"
 
 # Patch convert_hf_to_gguf.py to alias missing torch uint types

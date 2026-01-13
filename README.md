@@ -200,6 +200,42 @@ This is the file used by your CPU inference system.
 
 ------------------------------------------------------------------------
 
+# ✅ **Test GGUF (Base + Adapters)**
+
+Use these commands inside the GPU pod or CPU pod terminal to test the
+base model and adapters with the `test_gguf` runner:
+
+### Base model only
+
+``` bash
+python /app/main.py test_gguf \
+  --model /workspace/models/mistral-7b-instruct-v0.2.Q4_K_M.gguf
+```
+
+### Single adapter (example: B2.gguf)
+
+``` bash
+python /app/main.py test_gguf \
+  --model /workspace/models/mistral-7b-instruct-v0.2.Q4_K_M.gguf \
+  --adapter /workspace/output/adapters_gguf/v3/B2.gguf
+```
+
+### Test all adapters in a folder
+
+``` bash
+python /app/main.py test_gguf \
+  --model /workspace/models/mistral-7b-instruct-v0.2.Q4_K_M.gguf \
+  --adapters-dir /workspace/output/adapters_gguf/v3
+```
+
+Optional flags:
+- `--prompt "your prompt here"`
+- `--max-tokens 256`
+- `--temp 0.7`
+- `--ngl 0` (force CPU if no GPU)
+
+------------------------------------------------------------------------
+
 ### **7️⃣ Archive Processed PDFs**
 
 Your input documents are moved to:
