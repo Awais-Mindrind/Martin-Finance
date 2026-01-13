@@ -48,11 +48,23 @@ PY
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir \
+# Upgrade pip
+RUN pip install --no-cache-dir --upgrade pip
+
+# 1. Install Torch first (The most important step for stability and memory management)
+RUN pip install --no-cache-dir \
+    torch==2.1.2+cu121 \
+    torchvision==0.16.2+cu121 \
+    torchaudio==2.1.2 \
+    --index-url https://download.pytorch.org/whl/cu121
+
+# 2. Install remaining dependencies (They will now reuse the existing torch installation)
+RUN pip install --no-cache-dir \
     transformers==4.43.3 \
     peft==0.12.0 \
     accelerate==0.33.0 \
     trl==0.9.6 \
+    bitsandbytes==0.43.1 \
     datasets \
     pandas \
     pypdf \
@@ -61,14 +73,6 @@ RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir \
     safetensors \
     einops \
     rich
-
-# CUDA-enabled PyTorch stack (cu121) for GPU + bitsandbytes/4-bit
-RUN pip install --no-cache-dir \
-    torch==2.1.2+cu121 \
-    torchvision==0.16.2+cu121 \
-    torchaudio==2.1.2 \
-    --index-url https://download.pytorch.org/whl/cu121 && \
-    pip install --no-cache-dir bitsandbytes==0.43.1
 
 COPY app/ /app/
 
