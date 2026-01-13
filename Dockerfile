@@ -13,19 +13,20 @@ RUN mkdir -p /workspace/models /workspace/peft /workspace/data /workspace/llama.
 
 WORKDIR /workspace
 
-# Build llama.cpp (Optimized for build speed and compatibility)
+# Build llama.cpp (Optimized for speed and GitHub Actions memory limits)
 RUN git -c http.version=HTTP/1.1 clone --depth 1 --single-branch https://github.com/ggerganov/llama.cpp /workspace/llama.cpp && \
     cd /workspace/llama.cpp && mkdir -p build && cd build && \
-    # Fix for libcuda.so.1 not found during build
+    # Fix for libcuda.so.1 not found in non-GPU environments (like GitHub Actions)
     ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1 && \
     export LIBRARY_PATH=/usr/local/cuda/lib64/stubs:$LIBRARY_PATH && \
     cmake .. \
         -DGGML_CUDA=ON \
         -DGGML_AVX2=OFF \
         -DGGML_FMA=OFF \
+        -DCMAKE_CUDA_ARCHITECTURES="75;80;86" \
         -DCMAKE_EXE_LINKER_FLAGS="-Wl,--allow-shlib-undefined" && \
-    # Only build necessary tools to save time
-    make -j"$(nproc)" llama-cli llama-quantize llama-export-lora
+    # Build only necessary tools with limited parallelism to prevent OOM
+    make -j2 llama-cli llama-quantize llama-export-lora
 
 # Patch convert_hf_to_gguf.py to alias missing torch uint types
 RUN python3 - <<'PY'
