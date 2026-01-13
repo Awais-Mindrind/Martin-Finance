@@ -33,7 +33,8 @@ def export_single_adapter(lora_path, output_path, base_model_path=None):
     # Strategy 2: Use python conversion script
     if os.path.exists(CONVERT_LORA_PY):
         print(f"Attempting python script conversion for {lora_path}...")
-        cmd = f"python3 {shlex.quote(CONVERT_LORA_PY)} {shlex.quote(lora_path)} --outfile {shlex.quote(output_path)}"
+        # Explicitly point to the local HF model to avoid HFValidationError
+        cmd = f"python3 {shlex.quote(CONVERT_LORA_PY)} {shlex.quote(lora_path)} --outfile {shlex.quote(output_path)} --base /workspace/models/hf_mistral"
         if run(cmd):
             return True
 
