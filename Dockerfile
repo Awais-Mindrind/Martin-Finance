@@ -23,7 +23,7 @@ RUN git -c http.version=HTTP/1.1 clone --depth 1 --single-branch https://github.
         -DGGML_CUDA=ON \
         -DGGML_AVX2=OFF \
         -DGGML_FMA=OFF \
-        -DCMAKE_CUDA_ARCHITECTURES="75;80;86" \
+        -DCMAKE_CUDA_ARCHITECTURES="80;86" \
         -DCMAKE_EXE_LINKER_FLAGS="-Wl,--allow-shlib-undefined" && \
     # Build only necessary tools with limited parallelism to prevent OOM
     make -j2 llama-cli llama-quantize llama-export-lora
