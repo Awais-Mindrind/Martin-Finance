@@ -1,133 +1,184 @@
 ---
 alwaysApply: true
 ---
-## Cursor Rules: Martin Finance LLM Pods (GPU/CPU)
+# ================================
+# Project: Finance GPT with AI Workflows
+# Cursor Rules (Strict, CPU-Stable / GPU-In-Progress)
+# ================================
 
-### Scope and Goal
-Keep this doc aligned with the current chat context. It must guide Cursor to:
-- support the client’s testing needs,
-- avoid breaking existing pipelines,
-- update docs/scripts safely,
-- and resolve future issues with clarity.
+# --- PROJECT CONTEXT ---
+This project implements a production-grade local LLM system for financial document
+analysis using GGUF models and AI workflows.
 
-### Client Requirements (from latest messages)
-- Test the base LLM (no adapters).
-- Test with a specific adapter: `/workspace/output/adapters_gguf/v3/B2.gguf`.
-- Be able to switch/test across all adapters in `/workspace/output/adapters_gguf/v3/`.
-- Provide a clear guide and working commands so the client can do this independently.
+Current state:
+- CPU inference is STABLE and VERIFIED
+- GPU inference is the NEXT PHASE and is IN PROGRESS
 
-### What We Achieved
-- Base model serving works (via `/v1/chat/completions`).
-- Added adapter-aware test runner:
-  - `app/scripts/test_gguf.py` supports `--adapter`, `--adapters-dir`, GPU detection, and prompt/temperature/max tokens.
-  - `app/main.py` forwards adapter/test flags and defaults to `/workspace/models/mistral-7b-instruct-v0.2.Q4_K_M.gguf`.
-- Updated docs:
-  - `layering-guide.md` now reflects *current limitations* (no hot-swap endpoints).
-  - `README.md` includes commands for base, single adapter, and batch adapter testing.
-- Confirmed that `/lora-adapters` endpoint is **not** available in the current Python server build. Dynamic hot-swap is not working.
-- Confirmed that llama.cpp C++ server runs, but adapter switching is **not** set up end-to-end (adapter GGUF export still required).
+CPU behavior is the reference baseline. GPU work must not regress CPU stability.
 
-### What’s Still Pending / Open
-- Adapter GGUF export pipeline:
-  - The client’s adapters exist in `/workspace/output/peft/*` (PEFT folders).
-  - The GGUF adapter files in `/workspace/output/adapters_gguf/v3/` must exist for testing.
-  - We attempted `llama-export-lora --format gguf` and hit `error: invalid argument: --format`. Need correct usage for the current llama.cpp build.
-- Reliable adapter switching:
-  - Python `llama_cpp.server` lacks adapter endpoints in this build.
-  - C++ `llama-server` can be used, but must be paired with valid adapter GGUFs and the correct adapter endpoint path (check server docs/OpenAPI).
-- Test runner `test_gguf.py` depends on a working `llama-cli` binary. We saw `SIGILL` due to CPU instruction mismatch; rebuild `llama.cpp` with conservative flags if needed.
+# --- ABSOLUTE RULES ---
+- Never assume HTTP 200 OK means inference succeeded.
+- Empty model output is always a failure.
+- Hidden reasoning or control-token output must be disabled.
+- Base model weights must never be modified.
+- Pods must be fully reconstructable from non-native storage alone.
 
-### Current Guidance to Client (Stable Path)
-- GPU pod: run `python /app/main.py train_all` to produce GGUF.
-- CPU pod: set `MODEL_PATH` to GGUF and serve via `/start.sh`, test with `/v1/chat/completions`.
-- Adapter hot-swap: not available in current build; static `--lora` only (if compatible adapter GGUFs are produced).
+# --- CPU BASELINE (LOCKED) ---
+- CPU inference path is considered correct and stable.
+- Do NOT refactor CPU logic unless a regression is proven.
+- CPU output correctness is the ground truth for evaluation.
+- All GPU outputs must match CPU outputs semantically.
 
----
+Breaking CPU behavior is a hard failure.
 
-## RunPod Workspace Layout (Observed)
+# --- GPU OBJECTIVES (NEXT PHASE) ---
+GPU support must:
+- Match CPU-visible output exactly (content, not token timing)
+- Never reintroduce hidden reasoning or suppressed output
+- Use the same prompts, templates, and inference parameters
+- Provide measurable speed or scale improvements
 
-### Common paths
-- `/workspace/models/`
-  - Base GGUFs:
-    - `mistral-7b-instruct-v0.2.Q4_K_M.gguf` (default)
-    - `mistral-7b-instruct-v0.2.Q4_K_M.f16.gguf`
-    - `mistral-7b-instruct-v0.3.Q6_K.gguf`
-    - `mistral-7b.Q4_K_M.gguf`
-    - `Mistral-7B-Instruct-v0.3.Q6_K.gguf`
-    - `TinyLlama-1.1B-Chat-v1.0.Q4_K_M.gguf`
-  - HF sources: `hf_mistral/`, `mistral-7b-instruct/`, `mistral-7b-instruct-v0.3/`, `tinyllama-1.1b-chat/`
-- `/workspace/output/`
-  - `/workspace/output/peft/` (adapter folders, e.g. `ASC_*`, `B2`, `F1`, `M1`, etc.)
-  - `/workspace/output/adapters_gguf/v3/` (expected adapter GGUFs; currently empty in logs)
-- `/workspace/llama.cpp/` (llama.cpp repo + build output)
-- `/workspace/data/`
-  - `/workspace/data/raw_pdfs/`
-  - `/workspace/data/processed/` (train.jsonl, pdf_pretest.json)
-  - `/workspace/data/archive/`
+GPU is an optimization layer, not a behavior change.
 
----
+# --- MODEL & INFERENCE CONSTRAINTS ---
+- Use GGUF models only.
+- Base model remains immutable.
+- Training outputs must be LoRA adapters or merged GGUF variants.
+- CPU and GPU must use the SAME model artifacts.
+- Do not mix training and inference logic.
 
-## CPU Serving Template (Separate Container)
+# --- GPU-SPECIFIC RULES ---
+- GPU usage must be explicit (e.g. n_gpu_layers, device flags).
+- GPU memory limits must be respected and logged.
+- CPU fallback must remain functional at all times.
+- GPU failures must degrade gracefully to CPU.
 
-Use the CPU template image to serve the GGUF model:
-- Image: `docker.io/awais2512/martin-finance-grand:v1`
-- Startup: `/start.sh` (starts sshd, ttyd, n8n, Qdrant, and `python -m llama_cpp.server` on port 5000)
-- Ports: 5000 (LLM), 5678 (n8n), 6333 (Qdrant), 22 (SSH), 7681 (web terminal)
-- Env:
-  - `MODEL_PATH=/workspace/models/mistral-7b-instruct-v0.2.Q4_K_M.gguf`
-  - Optional: `SSH_PUBLIC_KEY` or `SSH_PASSWORD`, `SSH_PORT`, `TTYD_PORT`, `N_THREADS`, `N_CTX`
-- Sanity check:
-  ```
-  curl -s http://127.0.0.1:5000/v1/chat/completions \
-    -H "Content-Type: application/json" \
-    -d '{"model":"local","messages":[{"role":"user","content":"Give me two facts about Mars"}],"max_tokens":128}'
-  ```
+No GPU-only code paths without CPU parity.
 
-Note: Adapter hot-swap is not available in the current Python server build. Use base GGUF only or static `--lora` if adapter GGUFs exist.
+# --- REQUIRED INFERENCE VALIDATION ---
+Every inference path (CPU or GPU) must:
+- Return visible printable text
+- Pass deterministic smoke tests (e.g. “Reply exactly: OK”)
+- Validate against:
+  - choices[0].message.content
+  - choices[0].text
+- Treat blank output as a hard error
 
----
+Validation must be identical across CPU and GPU.
 
-## Key Commands (Current)
+# --- API USAGE RULES ---
+Allowed endpoints:
+- /v1/chat/completions
+- /v1/completions
 
-### Base model test (GPU/CPU)
-```
-python /app/main.py test_gguf \
-  --model /workspace/models/mistral-7b-instruct-v0.2.Q4_K_M.gguf
-```
+Disallowed assumptions:
+- /health endpoints imply readiness
+- Server startup implies correctness
 
-### Single adapter test (requires adapter GGUF file)
-```
-python /app/main.py test_gguf \
-  --model /workspace/models/mistral-7b-instruct-v0.2.Q4_K_M.gguf \
-  --adapter /workspace/output/adapters_gguf/v3/B2.gguf
-```
+# --- TRAINING RULES ---
+- Training data source: PDFs only
+- PDFs must be stored on non-native storage
+- Training must be reproducible from raw PDFs
+- Training artifacts must be separable from the base model
 
-### Batch adapter test (requires adapter GGUFs)
-```
-python /app/main.py test_gguf \
-  --model /workspace/models/mistral-7b-instruct-v0.2.Q4_K_M.gguf \
-  --adapters-dir /workspace/output/adapters_gguf/v3
-```
+GPU is NOT required for training correctness — only for performance.
 
----
+# --- EVALUATION RULES ---
+- Always run baseline (CPU, base model)
+- Always run trained comparison (CPU first, then GPU)
+- Prompts must be identical across tests
+- GPU output must be semantically equivalent to CPU output
+- No subjective evaluation
 
-## Cursor Rules (Do / Don’t)
+GPU tests are invalid unless CPU tests pass first.
 
-Do:
-- Preserve current working base-model flow.
-- Keep docs consistent with real capabilities (no mention of `/lora-adapters` unless it actually works).
-- Ensure any new commands are valid in the pod’s environment.
-- Use `python3 /app/main.py` (not `python3/app/main.py`).
-- When editing docs, update `README.md` and `layering-guide.md` consistently.
+# --- FILE SYSTEM REQUIREMENTS ---
+Required directories:
+- /workspace/models/
+- /workspace/data/raw_pdfs/
+- /workspace/data/processed/
+- /workspace/scripts/
+- /workspace/logs/
 
-Don’t:
-- Claim adapter hot-swap works unless `/docs` or `/openapi.json` shows it.
-- Assume adapters in `/workspace/output/peft/` are directly usable as GGUFs.
-- Force GPU offload (`-ngl`) on CPU pods.
+GPU-specific logs must be stored alongside CPU logs.
 
----
+# --- POD RECONSTRUCTION RULES ---
+- Pods may be destroyed at any time
+- CPU-only pods must always be rebuildable
+- GPU pods must reuse the same storage layout
+- Startup must be one command
+- Logs must persist outside the pod
 
-## Next Steps (Recommended)
-- Export PEFT adapters to GGUF in `/workspace/output/adapters_gguf/v3/` using the correct `llama-export-lora` usage for the current llama.cpp build.
-- Validate adapter testing with `test_gguf.py`.
-- If needed, rebuild llama.cpp with conservative CPU flags to avoid SIGILL.
+# --- CURSOR BEHAVIOR RULES ---
+- Prefer minimal, deterministic changes
+- Do not refactor CPU logic during GPU work
+- Do not introduce GPU-only abstractions
+- Preserve prompt formats and inference flags
+- Always verify via logs and visible output
+
+# --- NON-GOALS ---
+Do NOT:
+- Change model behavior to suit GPU quirks
+- Trade correctness for speed
+- Introduce GPU-only features without CPU parity
+- Assume GPU correctness without comparison
+
+# --- DEFINITION OF WORKING ---
+CPU working:
+- Visible text
+- Correct content
+- Reproducible pods
+
+GPU working:
+- Same visible text as CPU
+- Same semantics as CPU
+- Faster or more scalable
+- No regressions
+
+# --- ADAPTER TESTING CONTEXT (CURRENT) ---
+Client has 22 trained adapters at `/workspace/output/adapters_gguf/v3/` (created with ChatGPT help).
+Client needs to:
+- Test base LLM (no adapter)
+- Test B2.gguf specifically
+- Test all 22 adapters sequentially
+- Switch between adapters easily
+
+## Available Tools (Just Added)
+- `verify_adapters`: Verifies setup, lists adapters, checks infrastructure
+  - Command: `python3 /app/main.py verify_adapters`
+  - Checks: base model, B2.gguf, adapters directory, test binary
+- `switch_adapter`: Interactive menu + direct commands for adapter testing
+  - Command: `python3 /app/main.py switch_adapter`
+  - Modes: interactive menu, `--adapter NAME`, `--all`, `--base-only`
+- `test_gguf`: Direct testing (existing, still works)
+  - Command: `python3 /app/main.py test_gguf --model PATH [--adapter PATH] [--adapters-dir DIR]`
+
+## Key Paths
+- Base model: `/workspace/models/mistral-7b-instruct-v0.2.Q4_K_M.gguf`
+- B2 adapter: `/workspace/output/adapters_gguf/v3/B2.gguf`
+- All adapters: `/workspace/output/adapters_gguf/v3/`
+- PEFT adapters (source): `/workspace/output/peft/` (if need to export)
+
+## Current Limitations
+- Sequential testing only (restarts inference for each adapter)
+- No runtime hot-swap via `/lora-adapters` endpoint (not available in current build)
+- Adapter export pipeline (`export_lora.py`) has issues with `llama-export-lora` format flag
+
+## Testing Workflow
+1. Verify: `python3 /app/main.py verify_adapters`
+2. Test base: `python3 /app/main.py test_gguf --model /workspace/models/mistral-7b-instruct-v0.2.Q4_K_M.gguf`
+3. Test B2: `python3 /app/main.py switch_adapter --adapter B2`
+4. Test all: `python3 /app/main.py switch_adapter --all`
+5. Interactive: `python3 /app/main.py switch_adapter` (menu-driven)
+
+## Notes for Cursor
+- Client's adapters are already GGUF format (created externally)
+- No test adapters were created by this codebase
+- Focus on making testing easy and reliable
+- Preserve existing test_gguf.py functionality
+- When updating docs, sync README.md, ADAPTER_TESTING_GUIDE.md, and this file
+
+# --- CORE PRINCIPLE ---
+CPU defines correctness.
+GPU optimizes execution.
+If output cannot be seen, compared, and reproduced — it does not exist.

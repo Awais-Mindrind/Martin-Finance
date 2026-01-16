@@ -15,17 +15,25 @@ def print_welcome_message():
 
 Welcome, Martin. Use the following commands to test your models:
 
-1. CONVERT YOUR ADAPTERS (Run this first)
-   python3 /app/main.py export_adapters
+STEP 1: VERIFY YOUR SETUP
+   python3 /app/main.py verify_adapters
 
-2. TEST BASE MODEL (No training)
+STEP 2: TEST YOUR MODELS
+   # Interactive adapter switcher (recommended)
+   python3 /app/main.py switch_adapter
+
+   # Or use direct commands:
+   # Base model only:
    python3 /app/main.py test_gguf --model /workspace/models/mistral-7b-instruct-v0.2.Q4_K_M.gguf
 
-3. TEST A SPECIFIC ADAPTER (e.g., B2)
-   python3 /app/main.py test_gguf --adapter /workspace/output/adapters_gguf/v3/B2.gguf
+   # Test B2 adapter:
+   python3 /app/main.py switch_adapter --adapter B2
 
-4. TEST ALL 22 ADAPTERS SEQUENTIALLY
-   python3 /app/main.py test_gguf --adapters-dir /workspace/output/adapters_gguf/v3/
+   # Test all adapters:
+   python3 /app/main.py switch_adapter --all
+
+STEP 3: EXPORT ADAPTERS (if needed)
+   python3 /app/main.py export_adapters
 
 Need help? Contact Mian.
 ==================================================
@@ -45,7 +53,9 @@ def main():
         "archive_pdfs",
         "train_all",
         "test_gguf",
-        "export_adapters"
+        "export_adapters",
+        "verify_adapters",
+        "switch_adapter"
     ], help="Action to perform")
     
     parser.add_argument("--model", help="Path to GGUF model for test_gguf mode", default="/workspace/models/mistral-7b-instruct-v0.2.Q4_K_M.gguf")
@@ -110,6 +120,27 @@ def main():
         cmd = ["python3", "/app/scripts/export_lora.py", "--base_model", args.base_gguf]
         if args.adapters_dir:
             cmd += ["--adapters_dir", args.adapters_dir]
+        run(" ".join(shlex.quote(c) for c in cmd))
+
+    elif args.mode == "verify_adapters":
+        run("python3 /app/scripts/verify_adapters.py")
+
+    elif args.mode == "switch_adapter":
+        cmd = ["python3", "/app/scripts/switch_adapter.py"]
+        if args.model:
+            cmd += ["--model", args.model]
+        if args.adapter:
+            cmd += ["--adapter", args.adapter]
+        if args.adapters_dir:
+            cmd += ["--adapters-dir", args.adapters_dir]
+        if args.prompt:
+            cmd += ["--prompt", args.prompt]
+        if args.max_tokens is not None:
+            cmd += ["--max-tokens", str(args.max_tokens)]
+        if args.temp is not None:
+            cmd += ["--temp", str(args.temp)]
+        if args.ngl is not None:
+            cmd += ["--ngl", str(args.ngl)]
         run(" ".join(shlex.quote(c) for c in cmd))
 
     # 🚀 Full pipeline (new PDFs → dataset → LoRA → merge → GGUF → archive PDFs)
